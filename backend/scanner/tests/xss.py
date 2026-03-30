@@ -1,5 +1,6 @@
 import httpx
 from dataclasses import dataclass
+from scanner.tests.request_utils import build_request_kwargs, inject_query_payload, parse_request_params
 
 MAX_ENDPOINTS = 50  # limit for speed
 
@@ -37,6 +38,7 @@ def run(endpoints: list[dict], client: httpx.Client) -> list[XSSResult]:
     for ep in live_eps[:MAX_ENDPOINTS]:
         url = ep["url"]
         method = ep.get("method", "GET")
+        request_params = parse_request_params(ep.get("request_params"))
         base = url.split("?")[0]
         if base in tested:
             continue
@@ -47,13 +49,10 @@ def run(endpoints: list[dict], client: httpx.Client) -> list[XSSResult]:
         for marker, check in REFLECTION_MARKERS:
             try:
                 if method == "GET":
-                    test_url = f"{url}?q={marker}&search={marker}&input={marker}"
+                    test_url = inject_query_payload(url, request_params, marker)
                     resp = client.get(test_url)
                 else:
-                    resp = client.request(method, url, data={
-                        "q": marker, "search": marker, "input": marker,
-                        "name": marker, "comment": marker,
-                    })
+                    resp = client.request(method, url, **build_request_kwargs(ep, marker))
 
                 if check in resp.text:
                     ct = resp.headers.get("content-type", "")
@@ -83,12 +82,10 @@ def run(endpoints: list[dict], client: httpx.Client) -> list[XSSResult]:
         for payload in XSS_PAYLOADS:
             try:
                 if method == "GET":
-                    test_url = f"{url}?q={payload}&search={payload}"
+                    test_url = inject_query_payload(url, request_params, payload)
                     resp = client.get(test_url)
                 else:
-                    resp = client.request(method, url, data={
-                        "q": payload, "input": payload, "comment": payload,
-                    })
+                    resp = client.request(method, url, **build_request_kwargs(ep, payload))
 
                 if payload in resp.text:
                     results.append(XSSResult(

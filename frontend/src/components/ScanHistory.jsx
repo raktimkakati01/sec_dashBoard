@@ -7,7 +7,7 @@ const STATUS_DOT = {
 };
 
 export default function ScanHistory({ scans, activeScanId, onSelect }) {
-  if (!scans?.length) return <p className="text-[var(--text-dim)] text-[11px] px-1">No scans initiated.</p>;
+  if (!scans?.length) return <p className="text-[var(--text-dim)] text-[11px] px-1">No automation runs yet.</p>;
 
   return (
     <div className="space-y-1.5">
@@ -15,11 +15,11 @@ export default function ScanHistory({ scans, activeScanId, onSelect }) {
         <button key={s.id} onClick={() => onSelect(s.id)}
           className={`w-full text-left px-3 py-2.5 rounded-lg border transition-all ${
             s.id === activeScanId
-              ? "bg-[rgba(139,92,246,0.08)] border-[var(--violet)]/40 shadow-[0_0_12px_rgba(139,92,246,0.1)]"
-              : "bg-transparent border-white/5 hover:border-white/10"
+              ? "bg-[rgba(63,114,175,0.08)] border-[var(--violet)]/40 shadow-[0_0_12px_rgba(63,114,175,0.1)]"
+              : "bg-transparent border-[rgba(63,114,175,0.14)] hover:border-[rgba(63,114,175,0.28)]"
           }`}>
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-mono font-medium text-slate-300 truncate max-w-[150px]">{s.base_url.replace(/https?:\/\//, "")}</span>
+            <span className="text-[11px] font-mono font-medium text-slate-700 truncate max-w-[150px]">{s.base_url.replace(/https?:\/\//, "")}</span>
             <span className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOT[s.status] || "bg-slate-500"}`} />
           </div>
           <div className="flex items-center gap-2 mt-1 text-[10px] text-[var(--text-dim)] font-mono">

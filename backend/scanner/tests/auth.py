@@ -1,5 +1,6 @@
 import httpx
 from dataclasses import dataclass
+from scanner.tests.request_utils import build_request_kwargs
 
 MAX_ENDPOINTS = 80  # limit for speed
 
@@ -37,8 +38,9 @@ def run(endpoints: list[dict], auth_client: httpx.Client,
 
         # Test 1: Auth bypass — access endpoint WITHOUT cookies
         try:
-            resp_noauth = noauth_client.request(method, url)
-            resp_auth = auth_client.request(method, url)
+            request_kwargs = build_request_kwargs(ep)
+            resp_noauth = noauth_client.request(method, url, **request_kwargs)
+            resp_auth = auth_client.request(method, url, **request_kwargs)
 
             if (200 <= resp_noauth.status_code < 300 and
                     200 <= resp_auth.status_code < 300):
@@ -89,7 +91,7 @@ def run(endpoints: list[dict], auth_client: httpx.Client,
                         original_id = part
                         parts[i] = str(int(part) + 1)
                         test_url = "/".join(parts)
-                        resp = auth_client.request(method, test_url)
+                        resp = auth_client.request(method, test_url, **build_request_kwargs(ep))
                         if 200 <= resp.status_code < 300:
                             results.append(AuthResult(
                                 endpoint_url=url,

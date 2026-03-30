@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Lock } from "lucide-react";
 
 const METHOD_BG = { GET: "bg-emerald-500/15 text-emerald-400", POST: "bg-blue-500/15 text-blue-400", PUT: "bg-amber-500/15 text-amber-400", PATCH: "bg-orange-500/15 text-orange-400", DELETE: "bg-red-500/15 text-red-400", OPTIONS: "bg-purple-500/15 text-purple-400", HEAD: "bg-slate-500/15 text-slate-400" };
@@ -9,8 +9,9 @@ export default function EndpointList({ endpoints }) {
   const [sort, setSort] = useState("url");
   const [dir, setDir] = useState("asc");
   const [filter, setFilter] = useState("");
+  const [expandedKey, setExpandedKey] = useState(null);
 
-  if (!endpoints?.length) return <p className="text-[var(--text-dim)] text-center py-12 text-sm">No endpoints discovered.</p>;
+  if (!endpoints?.length) return <p className="text-[var(--text-dim)] text-center py-12 text-sm">No routes mapped yet.</p>;
 
   const toggle = (f) => { if (sort === f) setDir(dir === "asc" ? "desc" : "asc"); else { setSort(f); setDir("asc"); } };
 
@@ -29,11 +30,11 @@ export default function EndpointList({ endpoints }) {
         <div className="flex items-center gap-2">
           <Lock size={14} className="text-[var(--violet)]" />
           <span className="text-[10px] font-semibold tracking-[0.15em] uppercase text-[var(--violet)]">
-            Discovered Endpoints ({endpoints.length})
+            Mapped Routes ({endpoints.length})
           </span>
         </div>
         <input type="text" placeholder="Filter..." value={filter} onChange={(e) => setFilter(e.target.value)}
-          className="px-3 py-1.5 text-xs bg-[var(--obsidian)] border border-white/10 rounded-md text-white placeholder-[var(--text-dim)] w-48" />
+          className="px-3 py-1.5 text-xs bg-white border border-[rgba(63,114,175,0.18)] rounded-md text-[var(--text)] placeholder-[var(--text-dim)] w-48" />
       </div>
       <div className="glass-card overflow-hidden">
         <div className="overflow-x-auto">
@@ -49,13 +50,47 @@ export default function EndpointList({ endpoints }) {
             </thead>
             <tbody>
               {sorted.map((ep, i) => (
-                <tr key={i}>
-                  <td><span className={`method-badge ${METHOD_BG[ep.method] || "bg-slate-500/15 text-slate-400"}`}>{ep.method}</span></td>
-                  <td><span className="font-mono text-[12px] text-slate-300">{ep.url}</span></td>
-                  <td><span className={`font-mono font-semibold ${statusClass(ep.status_code)}`}>{ep.status_code ?? "—"}</span></td>
-                  <td><span className="text-[var(--text-dim)] font-mono text-xs">{ep.response_time != null ? `${ep.response_time}s` : "—"}</span></td>
-                  <td><span className="text-[10px] text-[var(--text-dim)]">{ep.source || "—"}</span></td>
-                </tr>
+                <Fragment key={`${ep.method}:${ep.url}:${i}`}>
+                  <tr key={`row-${i}`}>
+                    <td><span className={`method-badge ${METHOD_BG[ep.method] || "bg-slate-500/15 text-slate-400"}`}>{ep.method}</span></td>
+                    <td><span className="font-mono text-[12px] text-slate-700">{ep.url}</span></td>
+                    <td><span className={`font-mono font-semibold ${statusClass(ep.status_code)}`}>{ep.status_code ?? "—"}</span></td>
+                    <td><span className="text-[var(--text-dim)] font-mono text-xs">{ep.response_time != null ? `${ep.response_time}s` : "—"}</span></td>
+                    <td>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedKey(expandedKey === `${ep.method}:${ep.url}` ? null : `${ep.method}:${ep.url}`)}
+                        className="text-[10px] text-[var(--violet)] hover:underline"
+                      >
+                        {expandedKey === `${ep.method}:${ep.url}` ? "Hide" : "Review"}
+                      </button>
+                    </td>
+                  </tr>
+                  {expandedKey === `${ep.method}:${ep.url}` && (
+                    <tr key={`detail-${i}`}>
+                      <td colSpan={5} className="bg-[rgba(63,114,175,0.04)]">
+                        <div className="grid gap-3 py-2 md:grid-cols-2">
+                          <div>
+                            <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--text-dim)] mb-1">Request Content Type</div>
+                            <div className="text-[11px] font-mono text-slate-700 break-all">{ep.request_content_type || "—"}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--text-dim)] mb-1">Request Params</div>
+                            <div className="text-[11px] font-mono text-slate-700 break-all">{ep.request_params || "—"}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--text-dim)] mb-1">Request Example</div>
+                            <pre className="text-[11px] font-mono text-slate-700 whitespace-pre-wrap break-words bg-white border border-slate-200 rounded p-2 overflow-x-auto">{ep.request_example || "—"}</pre>
+                          </div>
+                          <div>
+                            <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--text-dim)] mb-1">Response Body Sample</div>
+                            <pre className="text-[11px] font-mono text-slate-700 whitespace-pre-wrap break-words bg-white border border-slate-200 rounded p-2 overflow-x-auto">{ep.response_body_sample || "—"}</pre>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>

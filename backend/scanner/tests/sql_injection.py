@@ -1,5 +1,6 @@
 import httpx
 from dataclasses import dataclass
+from scanner.tests.request_utils import build_request_kwargs, inject_query_payload, parse_request_params
 
 MAX_ENDPOINTS = 50  # limit for speed
 
@@ -56,6 +57,7 @@ def run(endpoints: list[dict], client: httpx.Client) -> list[SQLiResult]:
     for ep in live_eps[:MAX_ENDPOINTS]:
         url = ep["url"]
         method = ep.get("method", "GET")
+        request_params = parse_request_params(ep.get("request_params"))
         base = url.split("?")[0]
         if base in tested:
             continue
@@ -67,12 +69,10 @@ def run(endpoints: list[dict], client: httpx.Client) -> list[SQLiResult]:
                 break
             try:
                 if method == "GET":
-                    test_url = f"{url}?id={payload}&q={payload}"
+                    test_url = inject_query_payload(url, request_params, payload)
                     resp = client.get(test_url)
                 else:
-                    resp = client.request(method, url, data={
-                        "id": payload, "q": payload,
-                    })
+                    resp = client.request(method, url, **build_request_kwargs(ep, payload))
 
                 body = resp.text.lower()
 
@@ -94,7 +94,7 @@ def run(endpoints: list[dict], client: httpx.Client) -> list[SQLiResult]:
                 # Boolean-based check on first payload only
                 if not found and payload == SQLI_PAYLOADS[0]:
                     try:
-                        baseline = client.request(method, url)
+                        baseline = client.request(method, url, **build_request_kwargs(ep))
                         if abs(len(resp.text) - len(baseline.text)) > 500:
                             results.append(SQLiResult(
                                 endpoint_url=url,

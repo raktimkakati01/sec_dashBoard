@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 import re
 import httpx
@@ -51,6 +52,10 @@ class DiscoveredEndpoint:
     content_type: str | None = None
     response_time: float | None = None
     source: str = "brute_force"
+    request_content_type: str | None = None
+    request_params: str | None = None
+    request_example: str | None = None
+    response_body_sample: str | None = None
 
 
 @dataclass
@@ -108,6 +113,26 @@ class APICrawler:
         if key not in self.seen_urls:
             self.seen_urls.add(key)
             self.result.endpoints.append(endpoint)
+            return
+
+        # Merge richer request/response context into the existing endpoint record.
+        for current in self.result.endpoints:
+            if current.method == endpoint.method and current.url == endpoint.url:
+                if endpoint.request_content_type and not current.request_content_type:
+                    current.request_content_type = endpoint.request_content_type
+                if endpoint.request_params and not current.request_params:
+                    current.request_params = endpoint.request_params
+                if endpoint.request_example and not current.request_example:
+                    current.request_example = endpoint.request_example
+                if endpoint.response_body_sample and not current.response_body_sample:
+                    current.response_body_sample = endpoint.response_body_sample
+                if endpoint.content_type and not current.content_type:
+                    current.content_type = endpoint.content_type
+                if endpoint.status_code is not None and current.status_code is None:
+                    current.status_code = endpoint.status_code
+                if endpoint.response_time is not None and current.response_time is None:
+                    current.response_time = endpoint.response_time
+                break
 
     def _probe_url(self, url: str, method: str = "GET", source: str = "brute_force") -> DiscoveredEndpoint | None:
         """Send a request and record the endpoint if it responds."""
@@ -123,6 +148,7 @@ class APICrawler:
                 content_type=ct,
                 response_time=elapsed,
                 source=source,
+                response_body_sample=self._sample_response_body(resp),
             )
             self._add_endpoint(ep)
             # Check for additional endpoints in headers
@@ -157,12 +183,17 @@ class APICrawler:
         paths = spec.get("paths", {})
         for path, methods in paths.items():
             full_url = urljoin(self.base_url + "/", path.lstrip("/"))
-            for method in methods:
+            for method, operation in methods.items():
                 if method.upper() in HTTP_METHODS:
+                    request_content_type, request_example = self._extract_request_body_from_operation(operation or {})
+                    request_params = self._extract_params_from_operation(operation or {})
                     self._add_endpoint(DiscoveredEndpoint(
                         url=full_url,
                         method=method.upper(),
                         source="openapi_spec",
+                        request_content_type=request_content_type,
+                        request_example=request_example,
+                        request_params=request_params,
                     ))
 
     # --- Strategy 2: Common path brute-force ---
@@ -208,6 +239,9 @@ class APICrawler:
                 if script.string:
                     self._extract_api_urls_from_js(script.string)
 
+            for form in soup.find_all("form"):
+                self._extract_form_endpoint(form)
+
         except Exception as e:
             self.result.errors.append(f"HTML crawl error: {str(e)}")
 
@@ -243,3 +277,87 @@ class APICrawler:
             if not location.startswith("http"):
                 location = urljoin(self.base_url, location)
             self._add_endpoint(DiscoveredEndpoint(url=location, source=source))
+
+    def _extract_form_endpoint(self, form):
+        action = form.get("action") or self.base_url
+        method = (form.get("method") or "GET").upper()
+        if method not in HTTP_METHODS:
+            return
+
+        target_url = urljoin(self.base_url + "/", action.lstrip("/")) if action.startswith("/") else urljoin(self.base_url + "/", action)
+        fields = {}
+        for field in form.find_all(["input", "textarea", "select"]):
+            name = field.get("name")
+            if not name:
+                continue
+            field_type = field.get("type", "text")
+            fields[name] = f"<{field_type}>"
+
+        if not fields:
+            return
+
+        self._add_endpoint(DiscoveredEndpoint(
+            url=target_url,
+            method=method,
+            source="html_form",
+            request_content_type="application/x-www-form-urlencoded",
+            request_params=json.dumps(sorted(fields.keys())),
+            request_example=json.dumps(fields),
+        ))
+
+    def _extract_params_from_operation(self, operation: dict) -> str | None:
+        names = []
+        for param in operation.get("parameters", []):
+            name = param.get("name")
+            location = param.get("in")
+            if name:
+                names.append(f"{location}:{name}" if location else name)
+        return json.dumps(names) if names else None
+
+    def _extract_request_body_from_operation(self, operation: dict) -> tuple[str | None, str | None]:
+        request_body = operation.get("requestBody") or {}
+        content = request_body.get("content") or {}
+        for content_type, spec in content.items():
+            schema = spec.get("schema") or {}
+            example = spec.get("example")
+            if example is None:
+                examples = spec.get("examples") or {}
+                if isinstance(examples, dict):
+                    for item in examples.values():
+                        if isinstance(item, dict) and "value" in item:
+                            example = item["value"]
+                            break
+            if example is None:
+                example = self._schema_to_example(schema)
+            return content_type, json.dumps(example) if example is not None else None
+        return None, None
+
+    def _schema_to_example(self, schema: dict):
+        if not schema:
+            return None
+        schema_type = schema.get("type")
+        if schema_type == "object":
+            properties = schema.get("properties") or {}
+            return {name: self._schema_to_example(value) for name, value in properties.items()}
+        if schema_type == "array":
+            item_schema = schema.get("items") or {}
+            item_value = self._schema_to_example(item_schema)
+            return [item_value] if item_value is not None else []
+        if "example" in schema:
+            return schema["example"]
+        if "default" in schema:
+            return schema["default"]
+        if schema_type in {"integer", "number"}:
+            return 0
+        if schema_type == "boolean":
+            return False
+        return "<value>"
+
+    def _sample_response_body(self, resp: httpx.Response) -> str | None:
+        content_type = (resp.headers.get("content-type") or "").lower()
+        if not any(kind in content_type for kind in ("json", "text", "xml", "html", "javascript")):
+            return None
+        text_body = resp.text.strip()
+        if not text_body:
+            return None
+        return text_body[:2000]
