@@ -326,6 +326,7 @@ export default function App() {
             <VulnFindings
               findings={activeScan?.findings}
               endpoints={activeScan?.endpoints}
+              scan={activeScan}
               filterSeverity={findingsSeverityFilter}
               onFilterChange={setFindingsSeverityFilter}
             />

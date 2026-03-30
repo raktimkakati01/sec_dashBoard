@@ -207,7 +207,7 @@ function BugGroupCard({ group, section, expandedId, setExpandedId, endpointByUrl
   );
 }
 
-export default function VulnFindings({ findings = [], endpoints = [], filterSeverity = "all", onFilterChange }) {
+export default function VulnFindings({ findings = [], endpoints = [], scan = null, filterSeverity = "all", onFilterChange }) {
   const [filterSev, setFilterSev] = useState(filterSeverity || "all");
   const [expandedId, setExpandedId] = useState(null);
 
@@ -235,17 +235,18 @@ export default function VulnFindings({ findings = [], endpoints = [], filterSeve
 
   const hasFindings = findings.length > 0;
   const show404Table = notFoundRoutes.length > 0;
+  const activityRows = useMemo(() => buildActivityRows(scan), [scan?.endpoints, scan?.findings]);
 
   if (!hasFindings && !show404Table) {
     return (
-      <div className="findings-page max-w-5xl space-y-6">
+      <div className="findings-page w-full max-w-none space-y-6">
         <p className="text-[var(--text-dim)] text-center py-12 text-sm">No bugs flagged yet. Run automation on a target to populate findings and 404 routes.</p>
       </div>
     );
   }
 
   return (
-    <div className="findings-page max-w-5xl space-y-10">
+    <div className="findings-page w-full max-w-none space-y-8">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[rgba(63,114,175,0.18)] bg-[rgba(63,114,175,0.08)]">
@@ -293,7 +294,7 @@ export default function VulnFindings({ findings = [], endpoints = [], filterSeve
             title="Security findings"
             subtitle="One card per issue type. Expand to see every affected API."
           />
-          <div className="space-y-3">
+      <div className="grid gap-3 2xl:grid-cols-2 2xl:items-start">
             {mainGroups.map((g) => (
               <BugGroupCard
                 key={g.key}
@@ -340,39 +341,170 @@ export default function VulnFindings({ findings = [], endpoints = [], filterSeve
         </section>
       )}
 
-      {show404Table && (
+      {(show404Table || activityRows.length > 0) && (
         <section>
-          <SectionHeading
-            icon={ListTree}
-            title="404 responses from crawl"
-            subtitle="Endpoints the mapper recorded as HTTP 404 (useful for tuning bypass checks and dead routes)."
-          />
-          <div className="rounded-2xl border border-slate-200/90 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] overflow-hidden">
-            <div className="findings-404-scroll">
-              <table className="findings-404-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Method</th>
-                    <th scope="col">URL</th>
-                    <th scope="col">Source</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {notFoundRoutes.map((ep, i) => (
-                    <tr key={`${ep.method}:${ep.url}:${i}`}>
-                      <td>
-                        <span className="font-mono text-[11px] font-semibold text-slate-600">{ep.method}</span>
-                      </td>
-                      <td className="font-mono text-[11px] text-slate-800 break-all">{ep.url}</td>
-                      <td className="text-[11px] text-slate-500">{ep.source || "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          <div className="grid gap-4 2xl:grid-cols-2">
+            {show404Table && (
+              <div>
+                <SectionHeading
+                  icon={ListTree}
+                  title="404 responses from crawl"
+                  subtitle="Endpoints the mapper recorded as HTTP 404 (useful for tuning bypass checks and dead routes)."
+                />
+                <div className="rounded-2xl border border-slate-200/90 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] overflow-hidden findings-pane-card">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                    <span className="text-[11px] text-slate-500">Mapped 404 responses from crawler output.</span>
+                    <span className="text-[10px] font-semibold tracking-[0.14em] uppercase text-slate-500">
+                      {notFoundRoutes.length} rows
+                    </span>
+                  </div>
+                  <div className="findings-404-scroll findings-pane-scroll">
+                    <table className="findings-404-table findings-404-table--routes">
+                      <thead>
+                        <tr>
+                          <th scope="col">Method</th>
+                          <th scope="col">URL</th>
+                          <th scope="col">Source</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {notFoundRoutes.map((ep, i) => (
+                          <tr key={`${ep.method}:${ep.url}:${i}`}>
+                            <td>
+                              <span className="font-mono text-[11px] font-semibold text-slate-600">{ep.method}</span>
+                            </td>
+                            <td className="font-mono text-[11px] text-slate-800 max-w-0">
+                              <span className="block truncate" title={ep.url}>{compactUrl(ep.url)}</span>
+                            </td>
+                            <td className="text-[11px] text-slate-500">{ep.source || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activityRows.length > 0 && (
+              <div>
+                <SectionHeading
+                  icon={Route}
+                  title="Live Activity Log"
+                  subtitle="Recent crawler and scanner activity for this run."
+                />
+                <div className="rounded-2xl border border-slate-200/90 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] overflow-hidden findings-pane-card">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                    <span className="text-[11px] text-slate-500">Monitoring automation events and findings.</span>
+                    <button
+                      type="button"
+                      onClick={() => downloadCsv(activityRows)}
+                      className="text-[10px] font-semibold tracking-[0.14em] uppercase text-slate-500 hover:text-slate-800"
+                    >
+                      Export CSV
+                    </button>
+                  </div>
+                  <div className="findings-404-scroll findings-pane-scroll">
+                    <table className="findings-404-table findings-404-table--activity">
+                      <thead>
+                        <tr>
+                          <th scope="col">Method / URL</th>
+                          <th scope="col">Type</th>
+                          <th scope="col">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activityRows.map((row, idx) => (
+                          <tr key={`${row.kind}-${idx}`}>
+                            <td className="font-mono text-[11px] text-slate-800 max-w-0">
+                              <span className="inline-block min-w-[2.7rem] font-semibold text-slate-500">{row.method}</span>
+                              <span className="inline-block align-top max-w-[calc(100%-2.8rem)] truncate" title={row.path}>
+                                {compactUrl(row.path)}
+                              </span>
+                            </td>
+                            <td className="text-[11px] text-slate-600">{row.scanType}</td>
+                            <td>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${row.statusClass}`}>
+                                {row.statusLabel}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </section>
       )}
     </div>
   );
+}
+
+function buildActivityRows(scan) {
+  const endpoints = scan?.endpoints || [];
+  const findings = scan?.findings || [];
+
+  const endpointRows = endpoints.slice(-8).reverse().map((ep) => {
+    const path = (ep.url || "").replace(/https?:\/\/[^/]+/i, "") || ep.url || "—";
+    const status = ep.status_code;
+    const ok = status && status < 400;
+    const statusLabel = ok ? "SECURE" : status ? String(status) : "—";
+    const statusClass = ok ? "bg-emerald-500/15 text-emerald-600 border border-emerald-500/20" : "bg-slate-500/10 text-slate-600 border border-slate-400/20";
+    return {
+      kind: "endpoint",
+      method: ep.method || "GET",
+      path,
+      scanType: (ep.source || "CRAWLER").toString().toUpperCase(),
+      statusLabel,
+      statusClass,
+    };
+  });
+
+  const findingRows = findings.slice(-8).reverse().map((f) => {
+    const path = (f.endpoint_url || "").replace(/https?:\/\/[^/]+/i, "") || f.endpoint_url || "—";
+    return {
+      kind: "finding",
+      method: "⚑",
+      path,
+      scanType: (f.test_type || "SCAN").toString().replace(/_/g, " ").toUpperCase(),
+      statusLabel: "VULN",
+      statusClass: "bg-rose-500/15 text-rose-600 border border-rose-500/20",
+    };
+  });
+
+  return [...endpointRows, ...findingRows].slice(0, 14);
+}
+
+function downloadCsv(rows) {
+  const header = ["method", "url", "scan_type", "status"];
+  const lines = rows.map((r) => [
+    safeCsv(r.method),
+    safeCsv(r.path),
+    safeCsv(r.scanType),
+    safeCsv(r.statusLabel),
+  ].join(","));
+  const csv = [header.join(","), ...lines].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `bugops_activity_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 500);
+}
+
+function safeCsv(value) {
+  const s = String(value ?? "");
+  if (/[,"\n]/.test(s)) return `"${s.replaceAll('"', '""')}"`;
+  return s;
+}
+
+function compactUrl(input) {
+  const s = String(input || "");
+  const noHost = s.replace(/^https?:\/\/[^/]+/i, "");
+  return noHost || s;
 }

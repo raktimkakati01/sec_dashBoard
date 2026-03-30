@@ -340,9 +340,17 @@ body {
   max-height: min(420px, 50vh);
   -webkit-overflow-scrolling: touch;
 }
+.findings-pane-scroll {
+  height: min(420px, 50vh);
+  max-height: min(420px, 50vh);
+}
+.findings-pane-card {
+  display: flex;
+  flex-direction: column;
+}
 .findings-404-table {
   width: 100%;
-  min-width: 520px;
+  min-width: 0;
   border-collapse: collapse;
   table-layout: fixed;
   font-size: 13px;
@@ -375,13 +383,33 @@ body {
 .findings-404-table td:nth-child(1) {
   width: 5rem;
 }
-.findings-404-table th:nth-child(3),
-.findings-404-table td:nth-child(3) {
-  width: 9rem;
-}
 .findings-404-table td:nth-child(2) {
   word-break: break-word;
   overflow-wrap: anywhere;
+}
+
+/* 404 routes table: keep source column compact */
+.findings-404-table--routes th:nth-child(1),
+.findings-404-table--routes td:nth-child(1) { width: 4.75rem; }
+.findings-404-table--routes th:nth-child(3),
+.findings-404-table--routes td:nth-child(3) { width: 5.25rem; }
+
+/* Activity table: method/url wide, type medium, status compact */
+.findings-404-table--activity th:nth-child(1),
+.findings-404-table--activity td:nth-child(1) { width: auto; }
+.findings-404-table--activity th:nth-child(2),
+.findings-404-table--activity td:nth-child(2) { width: 7.25rem; }
+.findings-404-table--activity th:nth-child(3),
+.findings-404-table--activity td:nth-child(3) { width: 5.25rem; }
+
+.findings-404-table thead th:last-child,
+.findings-404-table tbody td:last-child {
+  padding-right: 12px;
+}
+
+/* Keep activity/404 rows visually stable for long URLs */
+.findings-404-table td {
+  line-height: 1.35;
 }
 
 .method-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: 0.04em; }

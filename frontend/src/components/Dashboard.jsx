@@ -58,7 +58,6 @@ export default function Dashboard({ scan, onSeveritySelect }) {
     return keys.size;
   }, [findings]);
 
-  const activityRows = buildActivityRows(scan);
   const sevLegend = [
     { key: "high", label: "HIGH", value: sevMixCounts.high, color: SEV_COLORS.high },
     { key: "medium", label: "MEDIUM", value: sevMixCounts.medium, color: SEV_COLORS.medium },
@@ -218,56 +217,6 @@ export default function Dashboard({ scan, onSeveritySelect }) {
         </div>
       )}
 
-      {/* Live Activity Log */}
-      <div className="dash-card overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "rgba(63,114,175,0.12)" }}>
-          <div>
-            <div className="text-[12px] font-semibold text-[var(--text)]">Live Activity Log</div>
-            <div className="text-[11px] text-[var(--text-dim)]">Monitoring automation events and findings.</div>
-          </div>
-          <button
-            type="button"
-            onClick={() => downloadCsv(activityRows)}
-            className="text-[10px] font-semibold tracking-[0.14em] uppercase text-[var(--text-dim)] hover:text-[var(--text)]"
-          >
-            Export CSV
-          </button>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="cyber-table">
-            <thead>
-              <tr>
-                <th>Method / URL</th>
-                <th>Scan Type</th>
-                <th>Timestamp</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {activityRows.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="text-center text-[var(--text-dim)] py-10">No activity yet.</td>
-                </tr>
-              ) : activityRows.map((row, idx) => (
-                <tr key={`${row.kind}-${idx}`}>
-                  <td>
-                    <span className="method-badge" style={methodPillStyle(row.method)}>{row.method}</span>{" "}
-                    <span className="font-mono text-[12px] text-slate-700">{row.path}</span>
-                  </td>
-                  <td className="text-[11px] text-slate-700 font-semibold">{row.scanType}</td>
-                  <td className="text-[11px] text-[var(--text-dim)] font-mono">{row.when}</td>
-                  <td>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${row.statusClass}`}>{row.statusLabel}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="px-4 py-3 text-center text-[11px] text-[var(--text-dim)]">
-          View complete audit trail →
-        </div>
-      </div>
     </div>
   );
 }
@@ -283,85 +232,4 @@ function KPI({ icon, label, value, glow, accent, pulse }) {
       <div className="text-[34px] leading-none font-bold font-mono text-[var(--text)]">{value}</div>
     </div>
   );
-}
-
-function buildActivityRows(scan) {
-  const endpoints = scan?.endpoints || [];
-  const findings = scan?.findings || [];
-
-  const endpointRows = endpoints.slice(-10).reverse().map((ep, i) => {
-    const path = (ep.url || "").replace(/https?:\/\/[^/]+/i, "") || ep.url || "—";
-    const status = ep.status_code;
-    const ok = status && status < 400;
-    const statusLabel = ok ? "SECURE" : status ? String(status) : "—";
-    const statusClass = ok ? "bg-emerald-500/15 text-emerald-500 border border-emerald-500/20" : "bg-slate-500/10 text-slate-600 border border-slate-400/20";
-    return {
-      kind: "endpoint",
-      method: ep.method || "GET",
-      path,
-      scanType: (ep.source || "CRAWLER").toString().toUpperCase(),
-      when: relTime(i),
-      statusLabel,
-      statusClass,
-    };
-  });
-
-  const findingRows = findings.slice(-10).reverse().map((f, i) => {
-    const path = (f.endpoint_url || "").replace(/https?:\/\/[^/]+/i, "") || f.endpoint_url || "—";
-    const statusClass = "bg-rose-500/15 text-rose-600 border border-rose-500/20";
-    return {
-      kind: "finding",
-      method: "⚑",
-      path,
-      scanType: (f.test_type || "SCAN").toString().replace(/_/g, " ").toUpperCase(),
-      when: relTime(i),
-      statusLabel: "VULN",
-      statusClass,
-    };
-  });
-
-  return [...endpointRows, ...findingRows].slice(0, 12);
-}
-
-function relTime(i) {
-  if (i < 1) return "2s ago";
-  if (i < 3) return `${(i + 1) * 7}s ago`;
-  if (i < 7) return `${i}m ago`;
-  return `${i + 2}m ago`;
-}
-
-function methodPillStyle(method) {
-  const m = String(method || "").toUpperCase();
-  if (m === "GET") return { background: "rgba(16,185,129,0.12)", color: "#059669", border: "1px solid rgba(16,185,129,0.20)" };
-  if (m === "POST") return { background: "rgba(249,115,22,0.12)", color: "#ea580c", border: "1px solid rgba(249,115,22,0.20)" };
-  if (m === "PUT") return { background: "rgba(245,158,11,0.12)", color: "#b45309", border: "1px solid rgba(245,158,11,0.22)" };
-  if (m === "DELETE") return { background: "rgba(239,68,68,0.12)", color: "#dc2626", border: "1px solid rgba(239,68,68,0.22)" };
-  if (m === "⚑") return { background: "rgba(244,63,94,0.10)", color: "#e11d48", border: "1px solid rgba(244,63,94,0.22)" };
-  return { background: "rgba(100,116,139,0.10)", color: "#475569", border: "1px solid rgba(100,116,139,0.18)" };
-}
-
-function downloadCsv(rows) {
-  const header = ["method", "url", "scan_type", "timestamp", "status"];
-  const lines = rows.map((r) => [
-    safeCsv(r.method),
-    safeCsv(r.path),
-    safeCsv(r.scanType),
-    safeCsv(r.when),
-    safeCsv(r.statusLabel),
-  ].join(","));
-  const csv = [header.join(","), ...lines].join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `bugops_activity_${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 500);
-}
-
-function safeCsv(value) {
-  const s = String(value ?? "");
-  if (/[,"\n]/.test(s)) return `"${s.replaceAll('"', '""')}"`;
-  return s;
 }
